@@ -46,9 +46,9 @@ Every architectural statement in `23-love8-location-system-design.md` is grounde
 | # | Design Statement / Architectural Property | Decompiled Source Reference | Physical Runtime Diagnostic Reference | Classification | Report Ref |
 | :- | :--- | :--- | :--- | :--- | :--- |
 | 10 | Location acquisition requests Google Play Services `FusedLocationProviderClient`. | `LoveLocationServer.java:28` | `dumpsys location`: `Request[fused, priority=HIGH_ACCURACY]` | **`[CONFIRMED_BOTH]`** | Report 03, 18 |
-| 11 | Location request configured for 5000ms nominal interval. | `LoveLocationServer.java:31` (`setIntervalMillis(5000L)`) | `dumpsys location`: `interval=5000ms` | **`[CONFIRMED_BOTH]`** | Report 03, 18 |
-| 12 | Location request fastest interval set to 2000ms. | `LoveLocationServer.java:32` (`setMinUpdateIntervalMillis(2000L)`) | `dumpsys location`: `minUpdateInterval=2000ms` | **`[CONFIRMED_BOTH]`** | Report 03, 18 |
-| 13 | Location request displacement gate set to 0.0 meters. | `LoveLocationServer.java:33` (`setMinUpdateDistanceMeters(0.0f)`) | `dumpsys location`: `minUpdateDistance=0.0m` | **`[CONFIRMED_BOTH]`** | Report 03, 18 |
+| 11 | Location request configured for 5000ms nominal interval. | `GoogleLocationConfig.java:67` (`intervalMillis = 5000L`) | `dumpsys location`: `interval=5000ms` | **`[CONFIRMED_BOTH]`** | Report 03, 18 |
+| 12 | Location request fastest interval set to 2500ms. | `GoogleLocationConfig.java:72` (`minUpdateIntervalMillis = 2500L`) | `dumpsys location`: `minUpdateInterval=0` (fallback config `2500L`) | **`[CONFIRMED_BOTH]`** | Report 03, 18 |
+| 13 | Location request displacement gate set to 0.0 meters. | `GoogleLocationConfig.java:77` (`minUpdateDistanceMeters = 0.0f`) | `dumpsys location`: `minUpdateDistance=0.0m` | **`[CONFIRMED_BOTH]`** | Report 03, 18 |
 | 14 | Fallback to native Android `LocationManager` when Play Services unavailable. | `NativeLocationProvider.java:45` (`requestLocationUpdates`) | N/A (Play Services available on Samsung A22) | **`[STATIC_UNVERIFIED_RUNTIME]`** | Report 03, 11 |
 | 15 | Observed stationary callback cadence averages 5.11 seconds. | Configured 5000ms interval | 10 stationary fixes: $\bar{\Delta} = 5.11\text{s}$ ($\sigma = 0.12\text{s}$) | **`[CONFIRMED_BOTH]`** | Report 19 |
 | 16 | Observed movement callback cadence averages 5.12 seconds. | Configured 5000ms interval | 13 movement fixes: $\bar{\Delta} = 5.12\text{s}$ ($\sigma = 0.11\text{s}$) | **`[CONFIRMED_BOTH]`** | Report 19 |

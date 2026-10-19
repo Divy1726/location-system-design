@@ -172,7 +172,7 @@ flowchart TD
 | Subsystem / Class | Technical Responsibility | Primary Evidence Reference | Evidentiary Status |
 | :--- | :--- | :--- | :--- |
 | **`LoveLocationServer`** | Sticky Android Foreground Service managing ongoing location lifecycle, persistent notification, and `FOREGROUND_SERVICE_LOCATION` typing. | `LoveLocationServer.java`, `AndroidManifest.xml` | **[CONFIRMED_BOTH]** |
-| **`FusedLocationProviderClient`** | Google Play Services client configured for continuous $5000\text{ ms}$ interval, $2000\text{ ms}$ fastest interval, `HIGH_ACCURACY` priority, and $0.0\text{ m}$ displacement threshold. | `LoveLocationServer.java:31`, `dumpsys location` | **[CONFIRMED_BOTH]** |
+| **`FusedLocationProviderClient`** | Google Play Services client configured for continuous $5000\text{ ms}$ interval, $2500\text{ ms}$ fastest interval (`minUpdateIntervalMillis = 2500L`), `HIGH_ACCURACY` priority, and $0.0\text{ m}$ displacement threshold. | `GoogleLocationConfig.java:65-91`, `dumpsys location` | **[CONFIRMED_BOTH]** |
 | **`LocationManager.java` (Core)** | Central location ingestion engine; performs monotonic validation, coordinate transformation, listener dispatch, and fan-out. | `LocationManager.java:784-798` | **[CONFIRMED_STATIC]** |
 | **`PlaceTransitionConfirmation`** | In-memory hysteresis state machine enforcing 3-point count and 60-second dwell gates before confirming ENTER/EXIT events. | `PlaceTransitionConfirmation.java:83-120` | **[CONFIRMED_BOTH]** |
 | **`GeofencePlacesSendManager`** | Coordinates place transition events, enforces $100\text{ m}$ accuracy pre-filter, and schedules `PlacesSendEnterWork` with 30s backoff. | `GeofencePlacesSendManager.java:56-80` | **[CONFIRMED_BOTH]** |
@@ -500,10 +500,10 @@ $$\epsilon = 1.0\times 10^{-4\circ} = 0.0001^\circ$$
 +------------------------------------+-----------------------+--------------------------------------+
 | Constant Identifier                | Exact Value           | Source Class Reference               |
 +------------------------------------+-----------------------+--------------------------------------+
-| Fused Interval                     | 5000 ms               | LoveLocationServer.java:31           |
-| Fused Fastest Interval             | 2000 ms               | LoveLocationServer.java:32           |
-| Fused Priority                     | 100 (HIGH_ACCURACY)   | LoveLocationServer.java:30           |
-| Fused Displacement Gate            | 0.0 meters            | LoveLocationServer.java:33           |
+| Fused Interval                     | 5000 ms               | GoogleLocationConfig.java:67         |
+| Fused Fastest Interval             | 2500 ms               | GoogleLocationConfig.java:72         |
+| Fused Priority                     | 100 (HIGH_ACCURACY)   | GoogleLocationConfig.java:65         |
+| Fused Displacement Gate            | 0.0 meters            | GoogleLocationConfig.java:77         |
 | Stay Hysteresis Point Count        | 3 points              | PlaceTransitionConfirmation.java:84  |
 | Stay Hysteresis Duration           | 60,000 ms (60 s)      | PlaceTransitionConfirmation.java:84  |
 | Place Transition Max Accuracy      | 100.0 meters          | GeofencePlacesSendManager.java:412   |
