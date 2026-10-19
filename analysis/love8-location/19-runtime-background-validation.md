@@ -258,5 +258,148 @@ Each incoming movement fix was evaluated against the decompiled pre-filter logic
 
 ---
 
-*(Part 3: Phase 3 Background & Screen-Lock Validation will be appended below upon execution.)*
+## Part 3: Phase 3 — Background & Screen-Lock Location Validation
+
+### 1. Controlled Background & Screen-Lock Parameters
+- **Screen State**: Screen strictly LOCKED (`mHoldingDisplaySuspendBlocker=false`).
+- **App State**: Backgrounded via Home navigation (`lastTopTime=-2m22s ago`).
+- **Process Scheduling**: `curProcState=4` (`PROCESS_STATE_FOREGROUND_SERVICE`), `oom_adj=200` (`FOREGROUND_SERVICE_ADJ`).
+- **Diagnostic Window**: 60-second bounded observation (`10-19 13:44:01.934` to `10-19 13:45:29.550` IST).
+- **Data Capture Modality**: Framework GNSS/FLP passive listeners, ActivityManager process state, `dumpsys power`, `dumpsys location`, AppOps, and Linux kernel TCP tables. Zero forced mock locations.
+
+---
+
+### 2. Location Callback Cadence Under Screen Lock
+
+Contrary to generic background throttling (which typically degrades unexempted background apps to 15-minute intervals under Android 8.0+ location limits), Love8 maintained an un-throttled **5-second cadence** throughout the entire 60-second locked screen duration:
+
+```text
+Evidence Trace: FLP Background Screen-Lock Callbacks (Logcat / FLP)
+10-19 13:44:01.934 2816 2915 I GmsPassiveListener_FLP: onGmsLocationChanged, provider=fused / speed=0.2749944 / time=1792397641877
+10-19 13:44:07.209 2816 2915 I GmsPassiveListener_FLP: onGmsLocationChanged, provider=fused / speed=0.0904663 / time=1792397647121 (Δ = 5.275s)
+10-19 13:44:12.245 2816 2915 I GmsPassiveListener_FLP: onGmsLocationChanged, provider=fused / speed=0.0064920 / time=1792397652165 (Δ = 5.036s)
+10-19 13:44:17.493 2816 2915 I GmsPassiveListener_FLP: onGmsLocationChanged, provider=fused / speed=1.1578691 / time=1792397657398 (Δ = 5.248s)
+10-19 13:44:22.509 2816 2915 I GmsPassiveListener_FLP: onGmsLocationChanged, provider=fused / speed=0.5666861 / time=1792397662436 (Δ = 5.016s)
+10-19 13:44:27.906 2816 2915 I GmsPassiveListener_FLP: onGmsLocationChanged, provider=fused / speed=0.0700034 / time=1792397667865 (Δ = 5.397s)
+10-19 13:44:32.954 2816 2915 I GmsPassiveListener_FLP: onGmsLocationChanged, provider=fused / speed=0.2910586 / time=1792397672871 (Δ = 5.048s)
+10-19 13:44:38.200 2816 2915 I GmsPassiveListener_FLP: onGmsLocationChanged, provider=fused / speed=0.1874346 / time=1792397678104 (Δ = 5.246s)
+10-19 13:44:43.196 2816 2915 I GmsPassiveListener_FLP: onGmsLocationChanged, provider=fused / speed=0.1432918 / time=1792397683132 (Δ = 4.996s)
+10-19 13:44:48.464 2816 2915 I GmsPassiveListener_FLP: onGmsLocationChanged, provider=fused / speed=0.0109672 / time=1792397688405 (Δ = 5.268s)
+10-19 13:44:53.486 2816 2915 I GmsPassiveListener_FLP: onGmsLocationChanged, provider=fused / speed=0.0078109 / time=1792397693405 (Δ = 5.022s)
+10-19 13:44:58.732 2816 2915 I GmsPassiveListener_FLP: onGmsLocationChanged, provider=fused / speed=0.7512407 / time=1792397698642 (Δ = 5.246s)
+10-19 13:45:03.741 2816 2915 I GmsPassiveListener_FLP: onGmsLocationChanged, provider=fused / speed=0.2190368 / time=1792397703679 (Δ = 5.009s)
+10-19 13:45:08.991 2816 2915 I GmsPassiveListener_FLP: onGmsLocationChanged, provider=fused / speed=0.0927876 / time=1792397708908 (Δ = 5.250s)
+10-19 13:45:14.024 2816 2915 I GmsPassiveListener_FLP: onGmsLocationChanged, provider=fused / speed=0.0327856 / time=1792397713947 (Δ = 5.033s)
+10-19 13:45:19.326 2816 2915 I GmsPassiveListener_FLP: onGmsLocationChanged, provider=fused / speed=0.5248715 / time=1792397719206 (Δ = 5.302s)
+10-19 13:45:24.315 2816 2915 I GmsPassiveListener_FLP: onGmsLocationChanged, provider=fused / speed=0.2232514 / time=1792397724245 (Δ = 4.989s)
+10-19 13:45:29.550 2816 2915 I GmsPassiveListener_FLP: onGmsLocationChanged, provider=fused / speed=0.8233697 / time=1792397729465 (Δ = 5.235s)
+```
+
+#### Background Cadence Analysis
+- **Total Fixes Delivered**: 18 fixes in 87.616 seconds.
+- **Mean Callback Cadence**: **5.148 seconds** ($\sigma = 0.129\text{ s}$).
+- **Throttling Detection**: **ZERO throttling observed**. Fix delivery frequency in the background with the screen locked was identical to active foreground operation ($5.11\text{s}$ foreground vs $5.15\text{s}$ background).
+
+---
+
+### 3. Foreground Service (`LoveLocationServer`) & OS Survival
+
+Inspection of ActivityManager services and process scheduling confirmed why background tracking continues unhindered:
+
+1. **Foreground Service State**:
+   ```text
+   * ServiceRecord{a216572 u0 ltd.love8.couples.relationship/com.lovemaps.core.server.LoveLocationServer}
+     isForeground=true  foregroundId=100
+     foregroundNoti=Notification(channel=system_location_permission flags=0x6a category=service groupKey=location_server)
+   ```
+   The service remains persistently pinned as an active Foreground Service with ongoing notification.
+2. **Process Priority (`curProcState=4` / `oom_adj=200`)**:
+   Android OOM killer assigns `FOREGROUND_SERVICE_ADJ` (`200`) to `ltd.love8.couples.relationship`. It is completely exempt from standard background cached process killing (`adj >= 900`).
+3. **Battery Whitelist Synergies**:
+   Because Love8 is user-whitelisted (`dumpsys deviceidle whitelist`), Android Doze maintenance windows do not restrict its high-power GPS network callbacks or background coroutine execution.
+
+---
+
+### 4. Background Horizontal Accuracy & Filtering Performance
+
+Samsung `SLocation` service recorded horizontal accuracy across the background session:
+
+| Timestamp | Screen State | Speed ($v$) | Horizontal Accuracy ($hAcc$) | Status / Filtering |
+| :---: | :---: | :---: | :---: | :---: |
+| `13:44:01.945` | Locked | `0.27 m/s` | `42.5 m` | **Accepted** ($< 200\text{m}$) |
+| `13:44:12.247` | Locked | `0.00 m/s` | `42.5 m` | **Accepted** ($< 200\text{m}$) |
+| `13:44:17.498` | Locked | `1.15 m/s` | `66.8 m` | **Accepted** ($< 200\text{m}$) |
+| `13:44:27.908` | Locked | `0.07 m/s` | `29.1 m` | **Accepted** ($< 200\text{m}$) |
+| `13:44:38.211` | Locked | `0.18 m/s` | `15.8 m` | **Accepted** ($< 200\text{m}$) |
+| `13:44:48.480` | Locked | `0.01 m/s` | `14.0 m` | **Accepted** ($< 200\text{m}$) |
+| `13:45:08.996` | Locked | `0.09 m/s` | `52.4 m` | **Accepted** ($< 200\text{m}$) |
+| `13:45:29.556` | Locked | `0.82 m/s` | `29.4 m` | **Accepted** ($< 200\text{m}$) |
+
+- **Filtering Outcomes**: All 18 fixes were accepted. Zero fixes exceeded the 200m accuracy cutoff or 200 km/h velocity bound.
+- **AppOps Tracking**: `cmd appops get ltd.love8.couples.relationship` confirmed `GPS`, `MONITOR_LOCATION`, `MONITOR_HIGH_POWER_LOCATION`, and `START_FOREGROUND` remained in an uninterrupted `(running)` state throughout the test.
+
+---
+
+### 5. Persistent Socket Connectivity in Background
+
+Linux kernel TCP connection inspection (`/proc/net/tcp` and `/proc/net/tcp6`) verified that backgrounding and screen locking did **not** drop or reset existing connections:
+
+```text
+Active Sockets for UID 10303 During Screen Lock:
+1. Local: 192.168.0.122:36096  Remote: 163.171.205.35:9971  State: 01 (ESTABLISHED)
+   -> Easemob IM Server (EMFCMMSGService push channel)
+2. Local: 192.168.0.122:51210  Remote: 47.77.228.191:443    State: 01 (ESTABLISHED)
+   -> Love8 Alibaba Cloud Gateway (Live telemetry channel)
+3. Local: 192.168.0.122:50520  Remote: 34.117.147.68:443    State: 01 (ESTABLISHED)
+   -> Google Transport Services
+```
+
+Sockets remained continuously in state `01` (`ESTABLISHED`) without teardown or socket reconnect latency.
+
+---
+
+### 6. Architectural Synthesis: How Love8 Survives Android 13 Background Restrictions
+
+```mermaid
+flowchart TD
+    subgraph OS_Enforcement["Android 13 Power & Process Management"]
+        Power[Screen Off / Locked] --> DozeCheck{Battery Optimization Whitelist?}
+        DozeCheck -->|Yes: Exempted| NoDoze[Doze Maintenance Restrictions Bypassed]
+        DozeCheck -->|No| DozeThrottled[Throttled to 15-min Batching]
+        
+        ProcMgmt[ActivityManager] --> OOM{Process Priority}
+        OOM -->|adj=200| FGS_Priority[FOREGROUND_SERVICE_ADJ: Immune to Low-Memory Killing]
+    end
+
+    subgraph Love8_Architecture["Love8 Background Location Architecture"]
+        FGS[LoveLocationServer] -->|foregroundId=100| FGS_Priority
+        Notif[Location Ongoing Notification] --> FGS
+        
+        FLP_Client[Google FusedLocationProviderClient] -->|Priority=100| FusedProvider[com.google.android.gms]
+        FusedProvider -->|WorkSource 10303| FusedRequest[Request @+5s0ms HIGH_ACCURACY]
+        
+        FusedRequest --> Callbacks[18 Fixes Delivered in 60s Screen Lock]
+        Callbacks --> Room[Room LocationDao Insertion]
+        Callbacks --> SocketPush[Easemob IM & Alibaba Cloud Socket Dispatch]
+    end
+
+    NoDoze --> FusedRequest
+```
+
+---
+
+### 7. Evidentiary Verification Matrix (Phase 3 Background & Screen Lock)
+
+| Investigation Dimension | Observation Method | Runtime Value / Finding | Classification |
+| :--- | :--- | :--- | :--- |
+| **Foreground Service Survival** | `dumpsys activity services` | `LoveLocationServer` active (`id=100`) | **BOTH STATIC & RUNTIME CONFIRMED** |
+| **Process OOM Priority** | ActivityManager OOM dump | `curProcState=4`, `oom_adj=200` | **RUNTIME OBSERVED** |
+| **Background Location Cadence** | `GmsPassiveListener_FLP` | 18 callbacks, steady $\bar{\Delta} = 5.15\text{ s}$ | **BOTH STATIC & RUNTIME CONFIRMED** |
+| **Location Throttling** | Framework FLP logs | Zero throttling (identical to foreground) | **RUNTIME OBSERVED** |
+| **Accuracy in Background** | Samsung `SLocation` / FLP | $14.0\text{m} - 66.8\text{m} \implies$ 100% accepted | **RUNTIME OBSERVED** |
+| **Doze Exemption** | `dumpsys deviceidle whitelist` | User exempted (`UID 10303`) | **RUNTIME OBSERVED** |
+| **TCP Socket Persistence** | `/proc/net/tcp` & `tcp6` | 3 sockets remained in `ESTABLISHED` state | **RUNTIME OBSERVED** |
+| **Local SQLite Persistence** | Production sandbox check | Sandboxed (`package not debuggable`) | **STATICALLY CONFIRMED ONLY** |
+| **Partner Device Rendering** | Partner UI observation | External device validation | **SCHEDULED FOR PHASE 4** |
+
 
